@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeRunner – Naucz się programować!</title>
+  <style>
+    /* ─────────────────────────────────────────────
+       RESET & BASE
+    ───────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --green:     #3fb950;
+      --green-dim: #1a4a26;
+      --cyan:      #58d6f7;
+      --yellow:    #e3b341;
+      --red:       #f85149;
+      --purple:    #bc8cff;
+      --text:      #c9d1d9;
+      --text-dim:  #6e7681;
+      --font-mono: "Courier New", Courier, monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ─────────────────────────────────────────────
+       1. INTERFEJS UŻYTKOWNIKA (HUD)
+    ───────────────────────────────────────────── */
+    #hud {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 48px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 24px;
+      z-index: 100;
+    }
+
+    .hud-logo {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--green);
+      letter-spacing: 2px;
+      margin-right: auto;
+    }
+
+    .hud-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .hud-label { color: var(--text-dim); }
+
+    .hud-value {
+      color: var(--cyan);
+      font-weight: bold;
+      min-width: 30px;
+      text-align: right;
+    }
+
+    #lives-icons { display: flex; gap: 4px; }
+    .life-icon { color: var(--red); font-size: 14px; }
+
+    #level-bar-wrap {
+      display: flex; align-items: center; gap: 8px;
+    }
+    #level-bar-bg {
+      width: 100px; height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #level-bar-fill {
+      height: 100%; width: 0%;
+      background: var(--purple);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    /* ─────────────────────────────────────────────
+       CANVAS (scena gry)
+    ───────────────────────────────────────────── */
+    #gameCanvas {
+      display: block;
+      position: fixed;
+      top: 48px; left: 0;
+    }
+
+    /* ─────────────────────────────────────────────
+       2. EKRANY NAKŁADKOWE
+    ───────────────────────────────────────────── */
+    .overlay {
+      position: fixed;
+      top: 48px; left: 0; right: 0; bottom: 0;
+      background: rgba(13,17,23,0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      gap: 20px;
+    }
+
+    .overlay.hidden { display: none; }
+
+    .overlay h1 {
+      font-size: 36px;
+      color: var(--green);
+      text-shadow: 0 0 20px var(--green);
+      letter-spacing: 4px;
+    }
+
+    .overlay h2 {
+      font-size: 20px;
+      color: var(--cyan);
+      letter-spacing: 2px;
+    }
+
+    .overlay p {
+      color: var(--text);
+      font-size: 14px;
+      text-align: center;
+      max-width: 520px;
+      line-height: 1.7;
+    }
+
+    .overlay .score-big {
+      font-size: 48px;
+      color: var(--yellow);
+    }
+
+    .btn {
+      padding: 12px 32px;
+      background: var(--green-dim);
+      border: 1px solid var(--green);
+      border-radius: 4px;
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 15px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--green);
+      color: var(--bg);
+      box-shadow: 0 0 12px var(--green);
+    }
+
+    /* Panel z podpowiedzią kodu */
+    #code-hint {
+      position: fixed;
+      bottom: 16px; right: 16px;
+      width: 340px;
+      background: var(--surface);
+      border: 1px solid var(--green);
+      border-radius: 6px;
+      padding: 12px 16px;
+      z-index: 150;
+      font-size: 12px;
+      transition: opacity 0.4s;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #code-hint.visible { opacity: 1; }
+
+    #code-hint .hint-title {
+      color: var(--green);
+      font-size: 11px;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    #code-hint pre {
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 8px;
+      color: var(--cyan);
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+
+    #code-hint .hint-desc {
+      color: var(--text-dim);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    /* Efekt zebrania punktów */
+    #score-popup {
+      position: fixed;
+      font-size: 22px;
+      font-weight: bold;
+      color: var(--yellow);
+      pointer-events: none;
+      z-index: 160;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+
+    /* Mobilne przyciski sterowania */
+    #mobile-controls {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      display: flex;
+      gap: 10px;
+      z-index: 110;
+    }
+
+    .m-btn {
+      width: 54px; height: 54px;
+      background: rgba(22,27,34,0.85);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 20px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─────────── HUD ─────────── -->
+  <div id="hud">
+    <span class="hud-logo">&lt;CodeRunner/&gt;</span>
+
+    <div class="hud-stat">
+      <span class="hud-label">PUNKTY</span>
+      <span class="hud-value" id="hud-score">0</span>
+    </div>
+
+    <div class="hud-stat">
+      <span class="hud-label">POZIOM</span>
+      <span class="hud-value" id="hud-level">1</span>
+    </div>
+
+    <div id="level-bar-wrap">
+      <div id="level-bar-bg"><div id="level-bar-fill"></div></div>
+    </div>
+
+    <div class="hud-stat">
+      <span class="hud-label">ŻYCIA</span>
+      <div id="lives-icons"></div>
+    </div>
+  </div>
+
+  <!-- ─────────── CANVAS ─────────── -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- ─────────── EKRAN STARTOWY ─────────── -->
+  <div class="overlay" id="screen-start">
+    <h1>CodeRunner</h1>
+    <h2>// Naucz się programować</h2>
+    <p>
+      Zbieraj kapsułki z kodem 💊, unikaj bugów 🐛 i dotrzyj do końca poziomu!<br>
+      Każda zebrana kapsułka uczy Cię fragmentu JavaScript.<br><br>
+      <strong style="color:var(--cyan)">← → </strong> ruch &nbsp;|&nbsp;
+      <strong style="color:var(--cyan)">↑ / Spacja</strong> skok &nbsp;|&nbsp;
+      <strong style="color:var(--cyan)">P</strong> pauza
+    </p>
+    <button class="btn" id="btn-start">$ run game.js</button>
+  </div>
+
+  <!-- ─────────── EKRAN PAUZY ─────────── -->
+  <div class="overlay hidden" id="screen-pause">
+    <h2>// PAUSED</h2>
+    <p>Naciśnij <strong style="color:var(--cyan)">P</strong> lub kliknij, aby kontynuować.</p>
+    <button class="btn" id="btn-resume">Kontynuuj</button>
+  </div>
+
+  <!-- ─────────── EKRAN GAME OVER ─────────── -->
+  <div class="overlay hidden" id="screen-gameover">
+    <h1>GAME OVER</h1>
+    <p>Twój wynik:</p>
+    <div class="score-big" id="go-score">0</div>
+    <button class="btn" id="btn-restart">Spróbuj ponownie</button>
+  </div>
+
+  <!-- ─────────── EKRAN WYGRANEJ ─────────── -->
+  <div class="overlay hidden" id="screen-win">
+    <h1>UKOŃCZONO!</h1>
+    <p>Przeszedłeś wszystkie poziomy! Wynik końcowy:</p>
+    <div class="score-big" id="win-score">0</div>
+    <button class="btn" id="btn-win-restart">Zagraj ponownie</button>
+  </div>
+
+  <!-- ─────────── PANEL Z KODEM ─────────── -->
+  <div id="code-hint">
+    <div class="hint-title">// ZEBRANY FRAGMENT KODU</div>
+    <pre id="hint-code"></pre>
+    <div class="hint-desc" id="hint-desc"></div>
+  </div>
+
+  <!-- ─────────── POPUP PUNKTÓW ─────────── -->
+  <div id="score-popup"></div>
+
+  <!-- ─────────── MOBILNE PRZYCISKI ─────────── -->
+  <div id="mobile-controls">
+    <div class="m-btn" id="mb-left">◀</div>
+    <div class="m-btn" id="mb-jump">▲</div>
+    <div class="m-btn" id="mb-right">▶</div>
+  </div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════════ -->
+<script>
+"use strict";
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA A: STAŁE I DANE GRY
+═══════════════════════════════════════════════════ */
+
+/** Fragmenty kodu JavaScript do zebrania */
+const CODE_PICKUPS = [
+  {
+    code: 'let x = 5;\nconsole.log(x); // 5',
+    desc: 'Deklaracja zmiennej. let tworzy zmienną, której wartość można zmienić.'
+  },
+  {
+    code: 'const PI = 3.14;\n// Stała – nie zmienia się!',
+    desc: 'const tworzy stałą. Próba zmiany wartości wyrzuci błąd.'
+  },
+  {
+    code: 'function greet(name) {\n  return "Cześć, " + name;\n}',
+    desc: 'Funkcja przyjmuje argument i zwraca wartość. Wielokrotnego użytku!'
+  },
+  {
+    code: 'for (let i = 0; i < 5; i++) {\n  console.log(i);\n}',
+    desc: 'Pętla for wykonuje blok kodu określoną liczbę razy (0,1,2,3,4).'
+  },
+  {
+    code: 'if (score > 100) {\n  console.log("Wygrałeś!");\n}',
+    desc: 'Instrukcja warunkowa if sprawdza warunek i wykonuje kod gdy jest true.'
+  },
+  {
+    code: 'const arr = [1, 2, 3];\narr.push(4); // [1,2,3,4]',
+    desc: 'Tablica przechowuje wiele wartości. push() dodaje element na koniec.'
+  },
+  {
+    code: 'const obj = {\n  name: "Bot",\n  hp: 100\n};',
+    desc: 'Obiekt grupuje właściwości. Dostęp: obj.name lub obj["name"].'
+  },
+  {
+    code: 'arr.forEach(item => {\n  console.log(item);\n});',
+    desc: 'forEach() iteruje po tablicy. Arrow function (() => {}) to skrócona składnia.'
+  },
+  {
+    code: 'Math.random(); // 0..1\nMath.floor(3.9); // 3',
+    desc: 'Math to wbudowany obiekt z funkcjami matematycznymi.'
+  },
+  {
+    code: 'setTimeout(() => {\n  console.log("po 1s");\n}, 1000);',
+    desc: 'setTimeout wywołuje funkcję po zadanym czasie (ms). Asynchroniczność!'
+  },
+  {
+    code: 'canvas.addEventListener(\n  "click", handler\n);',
+    desc: 'addEventListener nasłuchuje zdarzeń (klik, klawisz, ruch myszy).'
+  },
+  {
+    code: 'class Player {\n  constructor(x, y) {\n    this.x = x;\n  }\n}',
+    desc: 'Klasy to szablony obiektów. constructor() inicjuje właściwości.'
+  }
+];
+
+/** Dane konfiguracyjne poziomów */
+const LEVELS = [
+  {
+    bgColor:    '#0d1117',
+    platforms: [
+      { x: 0,   y: 0.85, w: 0.35, h: 0.06, color: '#1c6e3d' },
+      { x: 0.38,y: 0.72, w: 0.20, h: 0.04, color: '#1c6e3d' },
+      { x: 0.62,y: 0.60, w: 0.18, h: 0.04, color: '#1c6e3d' },
+      { x: 0.82,y: 0.50, w: 0.18, h: 0.04, color: '#1c6e3d' },
+      { x: 0.55,y: 0.38, w: 0.20, h: 0.04, color: '#1c6e3d' },
+      { x: 0.70,y: 0.85, w: 0.30, h: 0.06, color: '#1c6e3d' }
+    ],
+    bugs: 2, pickups: 3, goal: { x: 0.56, y: 0.30 }
+  },
+  {
+    bgColor:    '#0a0d12',
+    platforms: [
+      { x: 0,   y: 0.88, w: 0.25, h: 0.05, color: '#2d1b69' },
+      { x: 0.28,y: 0.76, w: 0.18, h: 0.04, color: '#2d1b69' },
+      { x: 0.50,y: 0.64, w: 0.16, h: 0.04, color: '#2d1b69' },
+      { x: 0.70,y: 0.54, w: 0.16, h: 0.04, color: '#2d1b69' },
+      { x: 0.48,y: 0.42, w: 0.18, h: 0.04, color: '#2d1b69' },
+      { x: 0.25,y: 0.32, w: 0.18, h: 0.04, color: '#2d1b69' },
+      { x: 0.65,y: 0.24, w: 0.20, h: 0.04, color: '#2d1b69' },
+      { x: 0.80,y: 0.88, w: 0.20, h: 0.05, color: '#2d1b69' }
+    ],
+    bugs: 4, pickups: 4, goal: { x: 0.68, y: 0.16 }
+  },
+  {
+    bgColor:    '#0a0d0a',
+    platforms: [
+      { x: 0,   y: 0.90, w: 0.20, h: 0.05, color: '#3d2000' },
+      { x: 0.22,y: 0.80, w: 0.14, h: 0.04, color: '#3d2000' },
+      { x: 0.38,y: 0.68, w: 0.12, h: 0.04, color: '#3d2000' },
+      { x: 0.52,y: 0.58, w: 0.12, h: 0.04, color: '#3d2000' },
+      { x: 0.66,y: 0.48, w: 0.12, h: 0.04, color: '#3d2000' },
+      { x: 0.80,y: 0.38, w: 0.12, h: 0.04, color: '#3d2000' },
+      { x: 0.60,y: 0.28, w: 0.14, h: 0.04, color: '#3d2000' },
+      { x: 0.38,y: 0.18, w: 0.14, h: 0.04, color: '#3d2000' },
+      { x: 0.55,y: 0.90, w: 0.45, h: 0.05, color: '#3d2000' }
+    ],
+    bugs: 6, pickups: 5, goal: { x: 0.40, y: 0.10 }
+  }
+];
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA B: INICJALIZACJA CANVASU
+═══════════════════════════════════════════════════ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+/** Dopasowuje rozmiar canvasu do okna przeglądarki.
+ *  Wywoływana przy starcie i przy każdym resize. */
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight - 48; // odejmujemy HUD
+}
+
+resizeCanvas();
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  if (game.state === 'playing') buildLevel(game.currentLevel);
+});
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA C: STAN GRY
+═══════════════════════════════════════════════════ */
+
+/**
+ * Centralny obiekt stanu gry.
+ * Wszystkie moduły czytają i piszą do tego obiektu.
+ */
+const game = {
+  state:        'start',  // 'start' | 'playing' | 'paused' | 'gameover' | 'win'
+  score:        0,
+  lives:        3,
+  currentLevel: 0,
+  levelProgress:0,        // 0..1 do paska postępu
+
+  // Obiekty sceny
+  player:    null,
+  platforms: [],
+  bugs:      [],
+  pickups:   [],
+  goal:      null,
+  particles: [],
+
+  // Sterowanie
+  keys: { left: false, right: false, up: false },
+
+  // Czas poprzedniej klatki (delta time)
+  lastTime:  0,
+  animId:    null
+};
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA D: KLASY OBIEKTÓW GRY
+═══════════════════════════════════════════════════ */
+
+/**
+ * Klasa Player – gracz kontrolowany przez użytkownika.
+ * @param {number} x  – startowa pozycja X (piksele)
+ * @param {number} y  – startowa pozycja Y (piksele)
+ */
+class Player {
+  constructor(x, y) {
+    this.x      = x;
+    this.y      = y;
+    this.w      = 28;
+    this.h      = 36;
+    this.vx     = 0;    // prędkość pozioma
+    this.vy     = 0;    // prędkość pionowa
+    this.onGround = false;
+    this.jumpCount = 0; // obsługa podwójnego skoku
+    this.invTimer = 0;  // czas nietykalności po trafieniu
+    this.frame    = 0;  // klatka animacji
+    this.frameTimer = 0;
+  }
+}
+
+/**
+ * Klasa Platform – statyczna platforma.
+ * @param {number} x,y – lewy górny róg (piksele)
+ * @param {number} w,h – szerokość i wysokość (piksele)
+ * @param {string} color – kolor CSS
+ */
+class Platform {
+  constructor(x, y, w, h, color) {
+    this.x = x; this.y = y;
+    this.w = w; this.h = h;
+    this.color = color;
+  }
+}
+
+/**
+ * Klasa Bug – poruszający się wróg.
+ * @param {number} x,y – pozycja startowa
+ * @param {Platform} platform – platforma, po której chodzi
+ */
+class Bug {
+  constructor(x, y, platform) {
+    this.x        = x;
+    this.y        = y;
+    this.w        = 24;
+    this.h        = 18;
+    this.platform = platform;
+    this.speed    = 60 + Math.random() * 40; // px/s
+    this.dir      = Math.random() < 0.5 ? 1 : -1;
+    this.frame    = 0;
+    this.frameTimer = 0;
+  }
+}
+
+/**
+ * Klasa Pickup – kapsułka z kodem do zebrania.
+ * @param {number} x,y  – pozycja środka
+ * @param {Object} data – obiekt z pola CODE_PICKUPS
+ */
+class Pickup {
+  constructor(x, y, data) {
+    this.x    = x;
+    this.y    = y;
+    this.r    = 14;      // promień
+    this.data = data;
+    this.bobOffset = Math.random() * Math.PI * 2; // faza unoszenia
+    this.collected = false;
+  }
+}
+
+/**
+ * Klasa Goal – punkt końcowy poziomu.
+ * @param {number} x,y – środek
+ */
+class Goal {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.r = 22;
+    this.pulseAngle = 0;
+  }
+}
+
+/**
+ * Klasa Particle – efekt wizualny (cząsteczki).
+ * @param {number} x,y  – pozycja startowa
+ * @param {string} color – kolor
+ * @param {number} vx,vy – prędkość
+ */
+class Particle {
+  constructor(x, y, color, vx, vy) {
+    this.x     = x;    this.y  = y;
+    this.color = color;
+    this.vx    = vx;   this.vy = vy;
+    this.life  = 1.0;  // 1 = pełne życie, 0 = usunięcie
+    this.r     = 3 + Math.random() * 4;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA E: BUDOWANIE POZIOMÓW
+═══════════════════════════════════════════════════ */
+
+/**
+ * Buduje scenę dla podanego indeksu poziomu.
+ * Tworzy platformy, bugi, pickupy i cel, przeliczając
+ * współrzędne względne (0..1) na piksele canvasu.
+ *
+ * @param {number} levelIndex – indeks poziomu (0-based)
+ */
+function buildLevel(levelIndex) {
+  const cw = canvas.width;
+  const ch = canvas.height;
+  const def = LEVELS[levelIndex];
+
+  // ── Platformy
+  game.platforms = def.platforms.map(p =>
+    new Platform(p.x * cw, p.y * ch, p.w * cw, p.h * ch, p.color)
+  );
+
+  // ── Gracz – startuje na pierwszej platformie
+  const sp = game.platforms[0];
+  if (!game.player) {
+    game.player = new Player(sp.x + 20, sp.y - 36);
+  } else {
+    game.player.x  = sp.x + 20;
+    game.player.y  = sp.y - 36;
+    game.player.vx = 0;
+    game.player.vy = 0;
+    game.player.onGround = false;
+    game.player.jumpCount = 0;
+  }
+
+  // ── Bugi – losowo rozmieszczone po platformach (pomijamy pierwszą)
+  game.bugs = [];
+  const bugPlats = game.platforms.slice(1);
+  for (let i = 0; i < def.bugs && i < bugPlats.length; i++) {
+    const plat = bugPlats[i % bugPlats.length];
+    const bx   = plat.x + plat.w * 0.3;
+    const by   = plat.y - 18;
+    game.bugs.push(new Bug(bx, by, plat));
+  }
+
+  // ── Pickupy – na każdej platformie (do limitu)
+  game.pickups = [];
+  const shuffledPlats = [...game.platforms].sort(() => Math.random() - 0.5);
+  const pickupData    = shuffleArray([...CODE_PICKUPS]);
+  for (let i = 0; i < def.pickups; i++) {
+    const plat = shuffledPlats[i % shuffledPlats.length];
+    const px   = plat.x + plat.w * 0.5;
+    const py   = plat.y - 30;
+    game.pickups.push(new Pickup(px, py, pickupData[i % pickupData.length]));
+  }
+
+  // ── Cel
+  const g = def.goal;
+  game.goal = new Goal(g.x * cw, g.y * ch);
+
+  // ── Zerowanie paska postępu
+  game.levelProgress = 0;
+  updateHUD();
+}
+
+/**
+ * Pomocnicza funkcja tasująca tablicę (algorytm Fisher-Yates).
+ * @param {Array} arr – wejściowa tablica
+ * @returns {Array} – ta sama tablica, ale potasowana
+ */
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA F: LOGIKA GRY – AKTUALIZACJA STANU
+═══════════════════════════════════════════════════ */
+
+/**
+ * Główna funkcja aktualizacji gry (game loop tick).
+ * Wywoływana przez requestAnimationFrame co ~16ms.
+ * Oblicza delta time i deleguje do poszczególnych
+ * funkcji update/kolizje.
+ *
+ * @param {DOMHighResTimeStamp} timestamp – czas bieżącej klatki (ms)
+ */
+function gameLoop(timestamp) {
+  if (game.state !== 'playing') return;
+
+  const dt = Math.min((timestamp - game.lastTime) / 1000, 0.05); // sekundy, max 50ms
+  game.lastTime = timestamp;
+
+  updatePlayer(dt);
+  updateBugs(dt);
+  updatePickups(timestamp);
+  updateGoal(timestamp);
+  updateParticles(dt);
+  checkCollisions();
+  checkFallDeath();
+
+  render();
+
+  game.animId = requestAnimationFrame(gameLoop);
+}
+
+/* ─── STEROWANIE POSTACIĄ ─── */
+
+/**
+ * Aktualizuje pozycję i prędkość gracza.
+ * Implementuje: ruch poziomy, grawitację, skok,
+ * nietykalność po trafieniu.
+ *
+ * @param {number} dt – czas od ostatniej klatki (sekundy)
+ */
+function updatePlayer(dt) {
+  const p   = game.player;
+  const GRAVITY    = 900;
+  const SPEED      = 200;
+  const JUMP_FORCE = -480;
+  const FRICTION   = 0.78;
+
+  // ── Ruch poziomy ze sterowania
+  if (game.keys.left)  p.vx -= SPEED * dt * 8;
+  if (game.keys.right) p.vx += SPEED * dt * 8;
+
+  // ── Tarcie (stopniowe wyhamowanie)
+  p.vx *= FRICTION;
+
+  // ── Grawitacja
+  p.vy += GRAVITY * dt;
+
+  // ── Ruch
+  p.x += p.vx * dt;
+  p.y += p.vy * dt;
+
+  // ── Kolizje z platformami (oś Y)
+  p.onGround = false;
+  for (const plat of game.platforms) {
+    if (resolvePlayerPlatform(p, plat)) {
+      p.onGround = true;
+      p.jumpCount = 0;
+    }
+  }
+
+  // ── Timer nietykalności
+  if (p.invTimer > 0) p.invTimer -= dt;
+
+  // ── Ściana lewa
+  if (p.x < 0) { p.x = 0; p.vx = 0; }
+
+  // ── Ściana prawa
+  if (p.x + p.w > canvas.width) { p.x = canvas.width - p.w; p.vx = 0; }
+
+  // ── Animacja chodu
+  if (Math.abs(p.vx) > 10) {
+    p.frameTimer += dt;
+    if (p.frameTimer > 0.12) { p.frame = (p.frame + 1) % 4; p.frameTimer = 0; }
+  } else {
+    p.frame = 0;
+  }
+}
+
+/**
+ * Obsługuje skok gracza.
+ * Pozwala na podwójny skok (max 2 skoki).
+ * Wywoływana przez obsługę zdarzeń klawiatury i przycisków mobile.
+ */
+function playerJump() {
+  const p = game.player;
+  if (p.jumpCount < 2) {
+    p.vy = p.jumpCount === 0 ? -480 : -380;
+    p.jumpCount++;
+    spawnParticles(p.x + p.w / 2, p.y + p.h, '#3fb950', 5);
+  }
+}
+
+/* ─── BUGI ─── */
+
+/**
+ * Aktualizuje pozycje bugów (patrolujących wrogów).
+ * Bugi chodzą po swojej platformie i zawracają na krawędziach.
+ *
+ * @param {number} dt – delta time (sekundy)
+ */
+function updateBugs(dt) {
+  for (const bug of game.bugs) {
+    bug.x += bug.speed * bug.dir * dt;
+
+    // ── Odbicie od krawędzi platformy
+    const plat = bug.platform;
+    if (bug.x < plat.x)               { bug.x = plat.x;              bug.dir = 1; }
+    if (bug.x + bug.w > plat.x + plat.w) { bug.x = plat.x + plat.w - bug.w; bug.dir = -1; }
+
+    // ── Animacja
+    bug.frameTimer += dt;
+    if (bug.frameTimer > 0.15) { bug.frame = (bug.frame + 1) % 2; bug.frameTimer = 0; }
+  }
+}
+
+/* ─── PICKUPY (animacja unoszenia) ─── */
+
+/**
+ * Aktualizuje animację unoszenia kapsułek z kodem.
+ * Kapsułki "pływają" w górę i dół używając funkcji sinus.
+ *
+ * @param {DOMHighResTimeStamp} timestamp – czas w ms (do sinus)
+ */
+function updatePickups(timestamp) {
+  const t = timestamp / 1000;
+  for (const pk of game.pickups) {
+    pk.displayY = pk.y + Math.sin(t * 2 + pk.bobOffset) * 6;
+  }
+}
+
+/* ─── CEL ─── */
+
+/**
+ * Aktualizuje animację pulsowania celu (portalu).
+ * @param {DOMHighResTimeStamp} timestamp – czas w ms
+ */
+function updateGoal(timestamp) {
+  game.goal.pulseAngle = timestamp / 500;
+}
+
+/* ─── CZĄSTECZKI ─── */
+
+/**
+ * Aktualizuje pozycje i czas życia cząsteczek efektów wizualnych.
+ * Cząsteczki z wyczerpanymi życiem są usuwane z tablicy.
+ *
+ * @param {number} dt – delta time (sekundy)
+ */
+function updateParticles(dt) {
+  const GRAVITY = 300;
+  for (let i = game.particles.length - 1; i >= 0; i--) {
+    const p = game.particles[i];
+    p.x  += p.vx * dt;
+    p.y  += p.vy * dt;
+    p.vy += GRAVITY * dt;
+    p.life -= dt * 2;
+    if (p.life <= 0) game.particles.splice(i, 1);
+  }
+}
+
+/**
+ * Tworzy wybuch cząsteczek w danym miejscu.
+ * @param {number} x,y   – punkt wybuchu
+ * @param {string} color – kolor cząsteczek
+ * @param {number} count – liczba cząsteczek
+ */
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 80 + Math.random() * 160;
+    game.particles.push(new Particle(
+      x, y, color,
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed - 100
+    ));
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA G: KOLIZJE
+═══════════════════════════════════════════════════ */
+
+/**
+ * Rozwiązuje kolizję gracza z pojedynczą platformą (oś Y).
+ * Stosuje metodę AABB (Axis-Aligned Bounding Box).
+ * Gracz jest "wypchnięty" powyżej platformy jeśli spada.
+ *
+ * @param {Player}   player   – obiekt gracza
+ * @param {Platform} platform – obiekt platformy
+ * @returns {boolean} – true jeśli kolizja nastąpiła od góry
+ */
+function resolvePlayerPlatform(player, platform) {
+  const px = player.x, py = player.y, pw = player.w, ph = player.h;
+  const bx = platform.x, by = platform.y, bw = platform.w, bh = platform.h;
+
+  // Sprawdź nakładanie AABB
+  if (px + pw <= bx || px >= bx + bw) return false;
+  if (py + ph <= by || py >= by + bh) return false;
+
+  // Kolizja od góry (gracz opada na platformę)
+  const overlapY = (py + ph) - by;
+  const prevBottom = py + ph - player.vy * 0.016; // przybliżona poprzednia pozycja
+  if (player.vy >= 0 && prevBottom <= by + 4) {
+    player.y  = by - ph;
+    player.vy = 0;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Sprawdza kolizje gracza z bugami, pickupami i celem.
+ * Wywoływana co klatkę z gameLoop.
+ * Korzysta z prostego testu prostokątów (AABB).
+ */
+function checkCollisions() {
+  const p = game.player;
+
+  // ── Kolizje z bugami
+  if (p.invTimer <= 0) {
+    for (const bug of game.bugs) {
+      if (rectsOverlap(p, bug)) {
+        onPlayerHitBug();
+        return;
+      }
+    }
+  }
+
+  // ── Kolizje z pickupami
+  for (let i = game.pickups.length - 1; i >= 0; i--) {
+    const pk = game.pickups[i];
+    if (!pk.collected && circleRectOverlap(pk, p)) {
+      collectPickup(pk, i);
+    }
+  }
+
+  // ── Kolizja z celem
+  const goal = game.goal;
+  const dist = Math.hypot(p.x + p.w / 2 - goal.x, p.y + p.h / 2 - goal.y);
+  if (dist < goal.r + 16) {
+    onLevelComplete();
+  }
+}
+
+/**
+ * Testuje nakładanie dwóch prostokątów (AABB).
+ * @param {{x,y,w,h}} a – pierwszy prostokąt
+ * @param {{x,y,w,h}} b – drugi prostokąt
+ * @returns {boolean}
+ */
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/**
+ * Testuje kolizję koła z prostokątem.
+ * @param {{x,y,r}} circle   – koło (środek + promień)
+ * @param {{x,y,w,h}} rect   – prostokąt
+ * @returns {boolean}
+ */
+function circleRectOverlap(circle, rect) {
+  const nearX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.w));
+  const nearY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.h));
+  const dx    = circle.x - nearX;
+  const dy    = circle.y - nearY;
+  return dx * dx + dy * dy < circle.r * circle.r;
+}
+
+/**
+ * Sprawdza, czy gracz wypadł poza dolną krawędź canvasu.
+ * Jeśli tak – traktowane jak uderzenie w buga.
+ */
+function checkFallDeath() {
+  if (game.player.y > canvas.height + 60) {
+    onPlayerHitBug();
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA H: ZDARZENIA GRY
+═══════════════════════════════════════════════════ */
+
+/**
+ * Wywoływana gdy gracz zderzy się z bugiem lub spadnie.
+ * Odejmuje życie, włącza nietykalność, resetuje pozycję
+ * lub kończy grę jeśli brak żyć.
+ */
+function onPlayerHitBug() {
+  game.lives--;
+  updateHUD();
+  spawnParticles(game.player.x + 14, game.player.y + 18, '#f85149', 15);
+
+  if (game.lives <= 0) {
+    endGame();
+    return;
+  }
+
+  // ── Reset pozycji gracza na start poziomu
+  const sp = game.platforms[0];
+  game.player.x  = sp.x + 20;
+  game.player.y  = sp.y - 36;
+  game.player.vx = 0;
+  game.player.vy = 0;
+  game.player.invTimer = 2.0; // 2s nietykalności
+}
+
+/**
+ * Wywoływana gdy gracz zbiera kapsułkę z kodem.
+ * Dodaje punkty, wyświetla panel z kodem, tworzy cząsteczki.
+ *
+ * @param {Pickup} pickup – zebrany obiekt pickup
+ * @param {number} index  – indeks w tablicy game.pickups
+ */
+function collectPickup(pickup, index) {
+  pickup.collected = true;
+  game.pickups.splice(index, 1);
+
+  const pts = 50;
+  game.score += pts;
+
+  // Aktualizuj pasek postępu
+  const totalPickups = LEVELS[game.currentLevel].pickups;
+  const collected    = totalPickups - game.pickups.length;
+  game.levelProgress = collected / totalPickups;
+
+  spawnParticles(pickup.x, pickup.y, '#e3b341', 12);
+  showScorePopup(pickup.x, pickup.y, '+' + pts);
+  showCodeHint(pickup.data);
+  updateHUD();
+}
+
+/**
+ * Wywoływana gdy gracz dotrze do portalu (celu).
+ * Przechodzi do następnego poziomu lub kończy grę sukcesem.
+ */
+function onLevelComplete() {
+  game.score += 200;
+  spawnParticles(game.goal.x, game.goal.y, '#58d6f7', 30);
+
+  game.currentLevel++;
+  if (game.currentLevel >= LEVELS.length) {
+    winGame();
+  } else {
+    buildLevel(game.currentLevel);
+    updateHUD();
+  }
+}
+
+/**
+ * Kończy grę przegraną (brak żyć).
+ * Zatrzymuje pętlę gry i wyświetla ekran Game Over.
+ */
+function endGame() {
+  game.state = 'gameover';
+  cancelAnimationFrame(game.animId);
+  document.getElementById('go-score').textContent = game.score;
+  showScreen('screen-gameover');
+}
+
+/**
+ * Kończy grę wygraną (ukończono wszystkie poziomy).
+ * Zatrzymuje pętlę gry i wyświetla ekran zwycięstwa.
+ */
+function winGame() {
+  game.state = 'win';
+  cancelAnimationFrame(game.animId);
+  document.getElementById('win-score').textContent = game.score;
+  showScreen('screen-win');
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA I: RENDEROWANIE
+═══════════════════════════════════════════════════ */
+
+/**
+ * Rysuje całą scenę gry na canvasie.
+ * Kolejność: tło → siatka → platformy → cel → pickupy
+ *             → bugi → gracz → cząsteczki.
+ * Wywoływana raz na klatkę przez gameLoop.
+ */
+function render() {
+  const W = canvas.width, H = canvas.height;
+
+  // ── Tło
+  ctx.fillStyle = LEVELS[game.currentLevel].bgColor;
+  ctx.fillRect(0, 0, W, H);
+
+  drawGrid(W, H);
+  drawPlatforms();
+  drawGoal();
+  drawPickups();
+  drawBugs();
+  drawPlayer();
+  drawParticles();
+}
+
+/**
+ * Rysuje subtelną siatkę w tle (efekt terminala).
+ * @param {number} W – szerokość canvasu
+ * @param {number} H – wysokość canvasu
+ */
+function drawGrid(W, H) {
+  ctx.strokeStyle = 'rgba(48,54,61,0.35)';
+  ctx.lineWidth   = 1;
+  const CELL = 40;
+  for (let x = 0; x < W; x += CELL) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = 0; y < H; y += CELL) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+}
+
+/**
+ * Rysuje wszystkie platformy z efektem gradientu i obramowaniem.
+ */
+function drawPlatforms() {
+  for (const plat of game.platforms) {
+    // ── Cień
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(plat.x + 4, plat.y + 4, plat.w, plat.h);
+
+    // ── Platforma
+    ctx.fillStyle = plat.color;
+    ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+
+    // ── Górna krawędź jaśniejsza
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(plat.x, plat.y, plat.w, 3);
+
+    // ── Obramowanie
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(plat.x, plat.y, plat.w, plat.h);
+  }
+}
+
+/**
+ * Rysuje cel (portal) z animacją pulsowania i etykietą.
+ */
+function drawGoal() {
+  const g = game.goal;
+  const pulse = 1 + Math.sin(g.pulseAngle) * 0.2;
+
+  // ── Poświata zewnętrzna
+  const grd = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r * 2.5 * pulse);
+  grd.addColorStop(0,   'rgba(88,214,247,0.3)');
+  grd.addColorStop(1,   'rgba(88,214,247,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(g.x, g.y, g.r * 2.5 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Koło
+  ctx.strokeStyle = '#58d6f7';
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.arc(g.x, g.y, g.r * pulse, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // ── Etykieta
+  ctx.fillStyle  = '#58d6f7';
+  ctx.font       = 'bold 11px Courier New';
+  ctx.textAlign  = 'center';
+  ctx.fillText('END', g.x, g.y + 4);
+}
+
+/**
+ * Rysuje kapsułki z kodem (pickup) z efektem unoszenia i poświatą.
+ */
+function drawPickups() {
+  for (const pk of game.pickups) {
+    const y = pk.displayY || pk.y;
+
+    // ── Poświata
+    const grd = ctx.createRadialGradient(pk.x, y, 0, pk.x, y, pk.r * 1.8);
+    grd.addColorStop(0, 'rgba(227,179,65,0.35)');
+    grd.addColorStop(1, 'rgba(227,179,65,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(pk.x, y, pk.r * 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Kapsułka
+    ctx.fillStyle   = '#e3b341';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.arc(pk.x, y, pk.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // ── Ikona </>
+    ctx.fillStyle = '#0d1117';
+    ctx.font      = 'bold 10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('</>', pk.x, y + 4);
+  }
+}
+
+/**
+ * Rysuje bugi (wrogów) jako animowane ikony 🐛 z obwódką.
+ */
+function drawBugs() {
+  for (const bug of game.bugs) {
+    // ── Pole czerwone
+    ctx.fillStyle = 'rgba(248,81,73,0.15)';
+    ctx.fillRect(bug.x - 2, bug.y - 2, bug.w + 4, bug.h + 4);
+
+    // ── Emoji buga
+    ctx.font      = '20px serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(bug.dir > 0 ? '🐛' : '🦟', bug.x, bug.y + bug.h);
+  }
+}
+
+/**
+ * Rysuje postać gracza (robot ASCII art) z animacją ruchu
+ * i efektem mrugania podczas nietykalności.
+ */
+function drawPlayer() {
+  const p = game.player;
+
+  // ── Mruganie gdy nietykalny
+  if (p.invTimer > 0 && Math.floor(p.invTimer * 10) % 2 === 0) return;
+
+  const x = Math.round(p.x), y = Math.round(p.y);
+
+  // ── Cień
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x + p.w / 2, y + p.h + 2, p.w / 2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Ciało robota
+  const bodyColor = p.invTimer > 0 ? '#f85149' : '#3fb950';
+  ctx.fillStyle   = bodyColor;
+  ctx.fillRect(x + 4, y + 10, p.w - 8, p.h - 10);
+
+  // ── Głowa
+  ctx.fillStyle = '#58d6f7';
+  ctx.fillRect(x + 5, y + 1, p.w - 10, 12);
+
+  // ── Oczy (animowane)
+  ctx.fillStyle = '#0d1117';
+  const eyeY = y + 5;
+  if (p.frame % 4 !== 3) {
+    ctx.fillRect(x + 8,           eyeY, 4, 4);
+    ctx.fillRect(x + p.w - 12,    eyeY, 4, 4);
+  } else {
+    // Mrugnięcie
+    ctx.fillRect(x + 8,          eyeY + 2, 4, 2);
+    ctx.fillRect(x + p.w - 12,   eyeY + 2, 4, 2);
+  }
+
+  // ── Nogi
+  ctx.fillStyle = bodyColor;
+  const legOffset = [0, 4, 0, -4][p.frame];
+  ctx.fillRect(x + 5,        y + p.h,     6, 5 + legOffset);
+  ctx.fillRect(x + p.w - 11, y + p.h,     6, 5 - legOffset);
+
+  // ── Antena
+  ctx.strokeStyle = '#bc8cff';
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + p.w / 2, y + 1);
+  ctx.lineTo(x + p.w / 2, y - 8);
+  ctx.stroke();
+  ctx.fillStyle = '#bc8cff';
+  ctx.beginPath();
+  ctx.arc(x + p.w / 2, y - 9, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Rysuje wszystkie aktywne cząsteczki efektów wizualnych.
+ */
+function drawParticles() {
+  for (const p of game.particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle   = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA J: INTERFEJS – AKTUALIZACJA HUD
+═══════════════════════════════════════════════════ */
+
+/**
+ * Aktualizuje wszystkie elementy HUD:
+ * wynik, poziom, życia (serduszka), pasek postępu.
+ * Wywoływana przy każdej zmianie stanu gry.
+ */
+function updateHUD() {
+  document.getElementById('hud-score').textContent = game.score;
+  document.getElementById('hud-level').textContent = game.currentLevel + 1;
+
+  // ── Serduszka (życia)
+  const livesEl = document.getElementById('lives-icons');
+  livesEl.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const span = document.createElement('span');
+    span.className   = 'life-icon';
+    span.textContent = i < game.lives ? '❤' : '🖤';
+    livesEl.appendChild(span);
+  }
+
+  // ── Pasek postępu poziomu
+  document.getElementById('level-bar-fill').style.width =
+    (game.levelProgress * 100) + '%';
+}
+
+/**
+ * Wyświetla panel z fragmentem zebranego kodu przez 4 sekundy.
+ * @param {{code: string, desc: string}} data – dane fragmentu kodu
+ */
+function showCodeHint(data) {
+  const hint = document.getElementById('code-hint');
+  document.getElementById('hint-code').textContent = data.code;
+  document.getElementById('hint-desc').textContent = data.desc;
+  hint.classList.add('visible');
+  clearTimeout(showCodeHint._timer);
+  showCodeHint._timer = setTimeout(() => hint.classList.remove('visible'), 4000);
+}
+
+/**
+ * Wyświetla animowany popup z liczbą zdobytych punktów.
+ * @param {number} x,y – pozycja w pikselach (na canvasie)
+ * @param {string} text – tekst do wyświetlenia (np. "+50")
+ */
+function showScorePopup(x, y) {
+  const popup = document.getElementById('score-popup');
+  const text  = arguments[2];
+  popup.textContent  = text;
+  popup.style.left   = (x + 10) + 'px';
+  popup.style.top    = (y + 48 - 20) + 'px'; // + offset HUD
+  popup.style.opacity = '1';
+  popup.style.transform = 'translateY(0)';
+  popup.style.transition = 'none';
+  // Animacja w górę
+  requestAnimationFrame(() => {
+    popup.style.transition = 'opacity 0.8s, transform 0.8s';
+    popup.style.opacity    = '0';
+    popup.style.transform  = 'translateY(-40px)';
+  });
+}
+
+/**
+ * Pokazuje overlay o podanym ID i ukrywa pozostałe.
+ * @param {string} id – ID elementu overlay do wyświetlenia
+ */
+function showScreen(id) {
+  ['screen-start', 'screen-pause', 'screen-gameover', 'screen-win']
+    .forEach(sid => {
+      const el = document.getElementById(sid);
+      el.classList.toggle('hidden', sid !== id);
+    });
+}
+
+/**
+ * Ukrywa wszystkie ekrany nakładkowe.
+ */
+function hideAllScreens() {
+  ['screen-start', 'screen-pause', 'screen-gameover', 'screen-win']
+    .forEach(id => document.getElementById(id).classList.add('hidden'));
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA K: ZARZĄDZANIE STANEM GRY
+═══════════════════════════════════════════════════ */
+
+/**
+ * Inicjuje nową grę od zera.
+ * Resetuje punkty, życia, poziom i uruchamia pętlę gry.
+ */
+function startGame() {
+  game.score        = 0;
+  game.lives        = 3;
+  game.currentLevel = 0;
+  game.state        = 'playing';
+  game.player       = null;
+
+  hideAllScreens();
+  buildLevel(0);
+  updateHUD();
+
+  game.lastTime = performance.now();
+  game.animId   = requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Wstrzymuje lub wznawia grę (toggle).
+ * Wywoływana klawiszem P lub przyciskiem pauzy.
+ */
+function togglePause() {
+  if (game.state === 'playing') {
+    game.state = 'paused';
+    cancelAnimationFrame(game.animId);
+    showScreen('screen-pause');
+  } else if (game.state === 'paused') {
+    game.state    = 'playing';
+    game.lastTime = performance.now();
+    hideAllScreens();
+    game.animId = requestAnimationFrame(gameLoop);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA L: OBSŁUGA ZDARZEŃ
+═══════════════════════════════════════════════════ */
+
+/**
+ * Obsługuje wciśnięcie klawisza.
+ * Ustawia flagi sterowania i obsługuje skok oraz pauzę.
+ * @param {KeyboardEvent} e – zdarzenie klawiatury
+ */
+function onKeyDown(e) {
+  switch (e.code) {
+    case 'ArrowLeft':  case 'KeyA': game.keys.left  = true;  break;
+    case 'ArrowRight': case 'KeyD': game.keys.right = true;  break;
+    case 'ArrowUp': case 'KeyW': case 'Space':
+      e.preventDefault();
+      if (game.state === 'playing') playerJump();
+      break;
+    case 'KeyP':
+      if (game.state === 'playing' || game.state === 'paused') togglePause();
+      break;
+  }
+}
+
+/**
+ * Obsługuje zwolnienie klawisza.
+ * Zeruje flagi kierunkowe sterowania.
+ * @param {KeyboardEvent} e – zdarzenie klawiatury
+ */
+function onKeyUp(e) {
+  switch (e.code) {
+    case 'ArrowLeft':  case 'KeyA': game.keys.left  = false; break;
+    case 'ArrowRight': case 'KeyD': game.keys.right = false; break;
+  }
+}
+
+// ── Rejestracja zdarzeń klawiatury
+window.addEventListener('keydown', onKeyDown);
+window.addEventListener('keyup',   onKeyUp);
+
+// ── Przyciski ekranów
+document.getElementById('btn-start').addEventListener('click', startGame);
+document.getElementById('btn-restart').addEventListener('click', startGame);
+document.getElementById('btn-win-restart').addEventListener('click', startGame);
+document.getElementById('btn-resume').addEventListener('click', togglePause);
+
+// ── Mobilne przyciski sterowania (touch)
+const mbLeft  = document.getElementById('mb-left');
+const mbRight = document.getElementById('mb-right');
+const mbJump  = document.getElementById('mb-jump');
+
+function setupMobileBtn(btn, keyName, isJump) {
+  btn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (isJump && game.state === 'playing') playerJump();
+    else game.keys[keyName] = true;
+  }, { passive: false });
+  btn.addEventListener('touchend',   e => { e.preventDefault(); if (!isJump) game.keys[keyName] = false; }, { passive: false });
+  btn.addEventListener('mousedown',  e => { if (isJump && game.state === 'playing') playerJump(); else game.keys[keyName] = true; });
+  btn.addEventListener('mouseup',    () => { if (!isJump) game.keys[keyName] = false; });
+}
+
+setupMobileBtn(mbLeft,  'left',  false);
+setupMobileBtn(mbRight, 'right', false);
+setupMobileBtn(mbJump,  'jump',  true);
+
+/* ═══════════════════════════════════════════════════
+   SEKCJA M: START
+═══════════════════════════════════════════════════ */
+
+// Pokaż ekran startowy i narysuj pierwszą klatkę tła
+showScreen('screen-start');
+resizeCanvas();
+ctx.fillStyle = '#0d1117';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+drawGrid(canvas.width, canvas.height);
+updateHUD();
+
+</script>
+</body>
+</html>
